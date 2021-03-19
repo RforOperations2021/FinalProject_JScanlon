@@ -27,7 +27,7 @@ states = list("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorad
 ui <- dashboardPage(
     dashboardHeader(),
     dashboardSidebar(
-      menuItem(selectInput("State", "Select State", choices = states, selected="Colorado"))
+      menuItem(selectizeInput("states", "Select State(s)", choices = states, selected="California", multiple=TRUE))
     ),
     dashboardBody(fluidRow(
       column(width = 9,
@@ -38,8 +38,12 @@ ui <- dashboardPage(
 
 server <- function(input, output) {
   
-  st.abb <- reactive ({
-    state.abb[which(state.name == input$State)]
+  st.abbs <- reactive ({
+    st.abbs = c()
+    for (i in 0:length(input$states)){
+      st.abbs <- c(st.abbs, state.abb[which(state.name == input$states[i])])
+    }
+    st.abbs
   })
   
   tracts <- reactive ({
@@ -47,7 +51,7 @@ server <- function(input, output) {
   
   st_tracts <- get_acs(geography = "tract", 
                        variables = "B19001_001", 
-                       state = st.abb(),
+                       state = st.abbs(),
                        geometry = TRUE)
   
   pal <- colorNumeric(palette = "viridis", 
@@ -58,8 +62,12 @@ server <- function(input, output) {
   
   })
   
+  NREL_states <- reactive({
+    noquote(paste(st.abbs(), collapse = ','))
+  })
+  
   stations <- reactive({
-  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",st.abb(),"&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
+  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",NREL_states(),"&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
   stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
   stations <- stations$fuel_stations
 })
@@ -80,7 +88,7 @@ server <- function(input, output) {
                  group = "Station Heatmap") %>%
       addLegend("bottomright", 
                 pal = pal, 
-                values = CA_tracts$estimate,
+                values = tracts()$estimate,
                 title = "Median Monthly Income",
                 labFormat = labelFormat(prefix = "$"),
                 opacity = 1) %>%
