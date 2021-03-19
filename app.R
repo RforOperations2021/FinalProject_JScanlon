@@ -10,6 +10,7 @@
 library(acs)
 library(tigris)
 library(stringr)
+library(httr)
 library(sf)
 library(choroplethr)
 library(tidycensus)
@@ -17,6 +18,7 @@ library(rgdal)
 library(geojsonio)
 library(leaflet)
 library(leaflet.extras)
+library(shinydashboard)
 
 census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
 
@@ -37,11 +39,6 @@ stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
 
 stations <- stations$fuel_stations
 
-stations %>%
-  filter(!is.null(longitude) & !is.null(latitude))
-
-
-
 ui <- dashboardPage(
     dashboardHeader(),
     dashboardSidebar(),
@@ -56,24 +53,32 @@ server <- function(input, output) {
 
   output$map <- renderLeaflet({
       leaflet() %>%
-      setView(-120.8, 37, 4.5) %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
+      setView(-120.8, 37, 5.5) %>%
+      addProviderTiles(providers$CartoDB.Positron, group = "Positron") %>%
       addPolygons(data = CA_tracts, popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
                   smoothFactor = 0,
-                  fillOpacity = 0.7,
-                  color = ~ pal(estimate)) %>%
-      addCircles(data = df1, lng = ~longitude, lat = ~latitude, weight = 1, color="green") %>%
-      addHeatmap(data = df1, lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10) %>%
+                  fillOpacity = 0.8,
+                  color = ~ pal(estimate),
+                  group = "Median Monthly Income") %>%
+      addCircles(data = stations, lng = ~longitude, lat = ~latitude, weight = 1, color="red",
+                 group = "Charging Stations") %>%
+      addHeatmap(data = stations, lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10,
+                 group = "Station Heatmap") %>%
       addLegend("bottomright", 
                 pal = pal, 
                 values = CA_tracts$estimate,
                 title = "Income",
                 labFormat = labelFormat(prefix = "$"),
-                opacity = 1)
+                opacity = 1) %>%
+      addLayersControl(
+        baseGroups = c("Positron"),
+        overlayGroups = c("Charging Stations", "Station Heatmap", "Median Monthly Income"),
+        options = layersControlOptions(collapsed = FALSE)) %>%
+      hideGroup("Station Heatmap")
+    
   }) 
-  
-  
+
 }
 
 shinyApp(ui, server)
