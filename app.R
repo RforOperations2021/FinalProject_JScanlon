@@ -28,6 +28,9 @@ CA_tracts <- get_acs(geography = "tract",
 pal <- colorNumeric(palette = "viridis", 
                     domain = CA_tracts$estimate)
 
+CA_tracts <- CA_tracts %>%
+  st_transform(crs = "+init=epsg:4326")
+
 res <- GET("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=CA&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8")
 
 stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
@@ -45,46 +48,32 @@ ui <- dashboardPage(
     dashboardBody(fluidRow(
       column(width = 9,
              box(width = NULL, solidHeader = TRUE,
-                 leafletOutput("income", height = 500))
-             )),
-      fluidRow(
-        column(width = 9,
-               box(width = NULL, solidHeader = TRUE,
-                   leafletOutput("stations", height = 500))
-        ))
+                 leafletOutput("map", height = 500))
+             ))
 ))
 
 server <- function(input, output) {
 
-  output$income <- renderLeaflet({
-    CA_tracts %>%
-      st_transform(crs = "+init=epsg:4326") %>%
-      leaflet(width = "100%") %>%
+  output$map <- renderLeaflet({
+      leaflet() %>%
       setView(-120.8, 37, 4.5) %>%
-      addProviderTiles(provider = "CartoDB.Positron") %>%
-      addPolygons(popup = ~ str_extract(NAME, "^([^,]*)"),
+      addProviderTiles(providers$CartoDB.Positron) %>%
+      addPolygons(data = CA_tracts, popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
                   smoothFactor = 0,
                   fillOpacity = 0.7,
                   color = ~ pal(estimate)) %>%
+      addCircles(data = df1, lng = ~longitude, lat = ~latitude, weight = 1, color="green") %>%
+      addHeatmap(data = df1, lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10) %>%
       addLegend("bottomright", 
                 pal = pal, 
-                values = ~ estimate,
+                values = CA_tracts$estimate,
                 title = "Income",
                 labFormat = labelFormat(prefix = "$"),
                 opacity = 1)
   }) 
   
-   output$stations <- renderLeaflet({
-     m <- leaflet(stations) %>%
-       setView(-120.8, 37, 4.5) %>%
-       addProviderTiles(providers$CartoDB.Positron) %>%
-       addCircles(lng = ~longitude, lat = ~latitude, weight = 1) %>%
-       addHeatmap(lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10)
-     m
-   })
   
-   
 }
 
 shinyApp(ui, server)

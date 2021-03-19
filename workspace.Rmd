@@ -266,14 +266,36 @@ library(leaflet.extras)
 df1 %>%
   filter(!is.null(longitude) & !is.null(latitude))
 
-df1
+census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
 
-m <- leaflet(df1) %>%
+CA_tracts <- get_acs(geography = "tract", 
+                    variables = "B19001_001", 
+                    state = "CA",
+                    geometry = TRUE)
+
+pal <- colorNumeric(palette = "viridis", 
+                    domain = CA_tracts$estimate)
+
+CA_tracts <- CA_tracts %>%
+    st_transform(crs = "+init=epsg:4326")
+
+leaflet() %>%
   setView(-120.8, 37, 4.5) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
-  addCircles(lng = ~longitude, lat = ~latitude, weight = 1) %>%
-  addHeatmap(lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10)
-m
+addPolygons(data = CA_tracts, popup = ~ str_extract(NAME, "^([^,]*)"),
+                stroke = FALSE,
+                smoothFactor = 0,
+                fillOpacity = 0.7,
+                color = ~ pal(estimate)) %>%
+  addCircles(data = df1, lng = ~longitude, lat = ~latitude, weight = 1, color="green") %>%
+  addHeatmap(data = df1, lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10) %>%
+      addLegend("bottomright", 
+              pal = pal, 
+              values = CA_tracts$estimate,
+              title = "Income",
+              labFormat = labelFormat(prefix = "$"),
+              opacity = 1)
+
 
 ```
 
@@ -285,31 +307,7 @@ library(sf)
 library(choroplethr)
 library(tidycensus)
 
-census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
 
-CA_tracts <- get_acs(geography = "tract", 
-                    variables = "B19001_001", 
-                    state = "CA",
-                    geometry = TRUE)
-
-pal <- colorNumeric(palette = "viridis", 
-                    domain = CA_tracts$estimate)
-
-CA_tracts %>%
-    st_transform(crs = "+init=epsg:4326") %>%
-    leaflet(width = "100%") %>%
-    addProviderTiles(provider = "CartoDB.Positron") %>%
-    addPolygons(popup = ~ str_extract(NAME, "^([^,]*)"),
-                stroke = FALSE,
-                smoothFactor = 0,
-                fillOpacity = 0.7,
-                color = ~ pal(estimate)) %>%
-    addLegend("bottomright", 
-              pal = pal, 
-              values = ~ estimate,
-              title = "Income",
-              labFormat = labelFormat(prefix = "$"),
-              opacity = 1)
 
 
 #apis <- listCensusApis()
