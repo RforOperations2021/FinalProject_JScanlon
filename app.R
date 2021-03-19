@@ -7,15 +7,84 @@
 #    http://shiny.rstudio.com/
 #
 
-library(shiny)
-library(shinydashboard)
+library(acs)
+library(tigris)
+library(stringr)
+library(sf)
+library(choroplethr)
+library(tidycensus)
+library(rgdal)
+library(geojsonio)
+library(leaflet)
+library(leaflet.extras)
+
+census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
+
+CA_tracts <- get_acs(geography = "tract", 
+                     variables = "B19001_001", 
+                     state = "CA",
+                     geometry = TRUE)
+
+pal <- colorNumeric(palette = "viridis", 
+                    domain = CA_tracts$estimate)
+
+res <- GET("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=CA&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8")
+
+stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
+
+stations <- stations$fuel_stations
+
+stations %>%
+  filter(!is.null(longitude) & !is.null(latitude))
+
+
 
 ui <- dashboardPage(
     dashboardHeader(),
     dashboardSidebar(),
-    dashboardBody()
-)
+    dashboardBody(fluidRow(
+      column(width = 9,
+             box(width = NULL, solidHeader = TRUE,
+                 leafletOutput("income", height = 500))
+             )),
+      fluidRow(
+        column(width = 9,
+               box(width = NULL, solidHeader = TRUE,
+                   leafletOutput("stations", height = 500))
+        ))
+))
 
-server <- function(input, output) { }
+server <- function(input, output) {
+
+  output$income <- renderLeaflet({
+    CA_tracts %>%
+      st_transform(crs = "+init=epsg:4326") %>%
+      leaflet(width = "100%") %>%
+      setView(-120.8, 37, 4.5) %>%
+      addProviderTiles(provider = "CartoDB.Positron") %>%
+      addPolygons(popup = ~ str_extract(NAME, "^([^,]*)"),
+                  stroke = FALSE,
+                  smoothFactor = 0,
+                  fillOpacity = 0.7,
+                  color = ~ pal(estimate)) %>%
+      addLegend("bottomright", 
+                pal = pal, 
+                values = ~ estimate,
+                title = "Income",
+                labFormat = labelFormat(prefix = "$"),
+                opacity = 1)
+  }) 
+  
+   output$stations <- renderLeaflet({
+     m <- leaflet(stations) %>%
+       setView(-120.8, 37, 4.5) %>%
+       addProviderTiles(providers$CartoDB.Positron) %>%
+       addCircles(lng = ~longitude, lat = ~latitude, weight = 1) %>%
+       addHeatmap(lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10)
+     m
+   })
+  
+   
+}
 
 shinyApp(ui, server)

@@ -1,0 +1,377 @@
+---
+title: "Workspace"
+author: "Jeffrey Scanlon"
+date: "3/8/2021"
+output: html_document
+---
+
+```{r}
+library(shiny)
+library(shinydashboard)
+library(DT)
+library(leaflet)
+library(geojson)
+library(geojsonio)
+
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+```
+
+
+```{r}
+
+```
+
+```{r}
+# Search Organizations Request
+search <- "&search=drug"
+exact <- "&exact=0"
+resOrgDesc <- GET(paste0("http://classic.maplight.org/services_open_api/map.organization_search_v1.json?apikey=example", search, exact))
+
+```
+
+```{r}
+#Search Organizations Response
+r_orgsearch <- jsonlite::fromJSON(content(resOrgDesc, "text"), flatten=TRUE)
+
+#View(r_orgsearch)
+
+df <- data.frame(r_orgsearch$organizations$organization_id, r_orgsearch$organizations$name)
+colnames(df)[colnames(df) == 'r_orgsearch.organizations.organization_id'] <- 'Org_ID'
+colnames(df)[colnames(df) == 'r_orgsearch.organizations.name'] <- 'Org_Name'
+df
+
+```
+
+```{r}
+# Organization Positions Request
+orgid <- "&organization_id=22135"
+juris <- "&jurisdiction=us"
+resOrgPos <- GET(paste0("http://classic.maplight.org/services_open_api/map.organization_positions_v1.json?apikey=example", "&organization_id=22135", "&jurisdiction=us"))
+```
+
+```{r}
+# Organization Positions Response
+r_orgpos <- content(resOrgPos, "text")
+dat_orgpos <- jsonlite::fromJSON(r_orgpos, flatten=TRUE)
+#View(dat_orgpos)
+dat_orgpos$positions
+```
+
+```{r}
+# Bill Search Request
+#orgid <- "&organization_id=22135"
+#juris <- "&jurisdiction=us"
+resBillSearch <- GET(paste0("http://classic.maplight.org/services_open_api/map.bill_search_v1.json?apikey=example", "&search=drug", "&jurisdiction=us"))
+```
+
+```{r}
+# Bill Search Response
+r_BillSearch <- content(resBillSearch, "text")
+dat_BillSearch <- jsonlite::fromJSON(r_BillSearch, flatten=TRUE)
+#View(dat_Bills)
+
+dat_BillSearch$bills
+```
+
+```{r}
+# Bill List Request
+resBillList <- GET(paste0("http://classic.maplight.org/services_open_api/map.bill_list_v1.json?apikey=example", "&jurisdiction=us", "&session=114", "&include_organizations=1"))
+resBillList
+```
+
+```{r}
+# Bill List Response
+r_BillList <- content(resBillList, "text")
+dat_BillList <- jsonlite::fromJSON(r_BillList, flatten=TRUE)
+
+dat_BillList$bills
+
+```
+
+```{r}
+resBillList <- GET(paste0("https://www.opensecrets.org/api/?method=candContrib&cid=N00007360&cycle=2020&apikey=95be8c4a8358e3e2891085ab9ec51f79", "&jurisdiction=us", "&session=114", "&include_organizations=1"))
+resBillList
+
+```
+
+```{r}
+res <- GET("http://www.opensecrets.org/api/?method=getLegislators&id=NJ&apikey=95be8c4a8358e3e2891085ab9ec51f79")
+
+res
+
+#View(res)
+```
+
+```{r}
+#Opensecrets
+#API Link: https://www.opensecrets.org/api/
+#Documentation: http://www.opensecrets.org/resources/create/api_doc.php
+
+library(RJSONIO)
+library(plyr)
+library(RCurl)
+library(rjson)
+library(ropensecretsapi)
+
+#set timeout option
+options(timeout=600)
+
+#import ID list from downloaded from Opensecrets (http://www.opensecrets.org/resources/create/api_doc.php)
+candidates = read.csv("Candidates.csv")
+
+candidates = as.data.frame(candidates)
+#create sequence of CIDs
+cid <-as.vector(cidlist$CID)
+
+# Initialize a data frame
+hdwd<- data.frame()
+
+#enter API key
+key <- 'c38b0b97c343f2f9eb8d363095991267' #enter key here in strings
+
+#enter FEC cycle
+cycle <- '2012'
+
+#base URL
+base.url <- 'http://www.opensecrets.org/api/?method=candSummary&output=json&cycle=2014&cid=N00007360&apikey=c38b0b97c343f2f9eb8d363095991267'
+
+url <- "https://www.opensecrets.org/api/?method=candSummary&cid=N00007360&cycle=2020&apikey=6bc85deef2e98e239fbc413df079c897"
+
+res <- GET("http://www.opensecrets.org/api/?method=getLegislators&id=NJ&apikey=6bc85deef2e98e239fbc413df079c897")
+res
+
+# loop offset
+for (i in 1:1150 ) {
+  final.url <- paste(base.url,cycle,'&apikey=',key,'&cid=',cid[i],sep = "")
+  data<- fromJSON(paste(readLines(final.url), collapse="")) 
+  hdwd <- rbind(hdwd, ldply(data$response$summary, 
+                                          function(x) c(x[[1]], x[[2]], x[[3]], x[[4]], x[[5]], x[[6]], x[[7]],x[[8]], x[[9]], x[[10]], 
+                                                        x[[11]], x[[12]], x[[13]], x[[14]], x[[15]])))
+}
+colnames(hdwd) <- c('response', 'name', 'crp_id', 'cycle', 'state', 'party','chamber', 'first_elected','next_election','total','spent','cash_on_hand', 'debt', 'origin', 'source', 'last_updated')
+```
+
+```{r}
+num <- length(which(candidates$Cycle == 2012))
+candidates$CID[1]
+params1 <- list(cid=paste0(candidates$CID[1]), cycle="2012")
+CandSummary <- GetCandSummaryData(params1)
+x <- CandSummary$response$summary$`@attributes`
+df1 <- as.data.frame(t(x))
+df1
+
+for (i in 2:10) {
+  print(paste0(candidates$CID[i]))
+}
+
+for (i in 2:10) {
+  params <- list(cid=paste0(candidates$CID[i]), cycle="2012")
+  tryCatch({
+    CandSummary <- GetCandSummaryData(params)},
+    error = function(e) {})
+  y <- CandSummary$response$summary$`@attributes`
+  df2 <- as.data.frame(t(y))
+  df1 <- rbind(df1, df2)
+}
+
+df1
+
+
+SetAPIKey ("6bc85deef2e98e239fbc413df079c897")
+params1 <- list (cid="N00007360", cycle="2012")
+params2 <- list (cid="N00007360", cycle="2012", ind="K02")
+
+candContribData <- GetCandContribData(params1)
+candIndbyInd <- GetCandIndByIndData(params2)
+CandSummary <- GetCandSummaryData(params3)
+x <- CandSummary$response$summary$`@attributes`
+df <- as.data.frame(t(x))
+
+```
+
+```{r}
+CandSummary <- content(CandSummary, "text")
+CandSummary <- jsonlite::fromJSON(CandSummary, flatten=TRUE)
+
+CandSummary$response$summary$`@attributes`
+
+```
+
+
+```{r}
+states <- 
+    geojson_read( 
+        x = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json"
+        , what = "sp"
+    )
+class(states)
+
+m <- leaflet(states) %>%
+  setView(-96, 37.8, 4) %>%
+  addTiles()
+
+m
+```
+
+```{r}
+## Install the required package with:
+## install.packages("RSocrata")
+library("RSocrata")
+
+df <- read.socrata(
+  "https://data.austintexas.gov/resource/k5hp-eece.csv",
+  app_token = "BIiwS5aYxatCSrQ17vtSnZ9Z0",
+  email     = "jscanlo2@andrew.cmu.edu",
+  password  = "OneDay32!"
+)
+
+df
+```
+
+```{r}
+library(dplyr)
+library(leaflet)
+
+m <- leaflet(states) %>%
+  setView(-97.8, 30.25, 9) %>%
+  addTiles()
+
+m
+
+```
+
+```{r}
+df
+```
+
+```{r}
+library(rgdal)
+library(geojsonio)
+
+res <- GET("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=CA&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8")
+
+stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
+
+df1 <- stations$fuel_stations
+
+```
+
+```{r}
+library(leaflet.extras)
+
+df1 %>%
+  filter(!is.null(longitude) & !is.null(latitude))
+
+df1
+
+m <- leaflet(df1) %>%
+  setView(-120.8, 37, 4.5) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircles(lng = ~longitude, lat = ~latitude, weight = 1) %>%
+  addHeatmap(lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10)
+m
+
+```
+
+```{r}
+library(acs)
+library(tigris)
+library(stringr)
+library(sf)
+library(choroplethr)
+library(tidycensus)
+
+census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
+
+CA_tracts <- get_acs(geography = "tract", 
+                    variables = "B19001_001", 
+                    state = "CA",
+                    geometry = TRUE)
+
+pal <- colorNumeric(palette = "viridis", 
+                    domain = CA_tracts$estimate)
+
+CA_tracts %>%
+    st_transform(crs = "+init=epsg:4326") %>%
+    leaflet(width = "100%") %>%
+    addProviderTiles(provider = "CartoDB.Positron") %>%
+    addPolygons(popup = ~ str_extract(NAME, "^([^,]*)"),
+                stroke = FALSE,
+                smoothFactor = 0,
+                fillOpacity = 0.7,
+                color = ~ pal(estimate)) %>%
+    addLegend("bottomright", 
+              pal = pal, 
+              values = ~ estimate,
+              title = "Income",
+              labFormat = labelFormat(prefix = "$"),
+              opacity = 1)
+
+
+#apis <- listCensusApis()
+#View(apis)
+
+tracts <- tracts(state = 'CA', cb=TRUE)
+
+api.key.install(key="ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
+
+geo<-geo.make(state=c("CA"), tract="*")
+
+income<-acs.fetch(endyear = 2016, span = 5, geography = geo, dataset= "acs", table.number = "B19001", col.names="pretty")
+
+income_df <- data.frame(paste0(str_pad(income@geography$state, 2, "left", pad="0"), 
+                             str_pad(income@geography$county, 3, "left", pad="0"), 
+                             str_pad(income@geography$tract, 6, "left", pad="0")), 
+                        income@estimate[,c("Household Income: Total:",
+"Household Income: $200,000 or more")], 
+                        stringsAsFactors = FALSE)
+
+income_df <- select(income_df, 1:3)
+rownames(income_df)<-1:nrow(income_df)
+names(income_df)<-c("GEOID", "total", "over_200")
+income_df$percent <- 100*(income_df$over_200/income_df$total)
+
+income_merged<- geo_join(tracts, income_df, "GEOID", "GEOID")
+# there are some tracts with no land that we should exclude
+income_merged <- income_merged[income_merged$ALAND>0,]
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
