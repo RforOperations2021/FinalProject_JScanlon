@@ -19,22 +19,39 @@ library(geojsonio)
 library(leaflet)
 library(leaflet.extras)
 library(shinydashboard)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(ggforce)
 
 census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
 
+race_vars <- c("Median Monthly Income" = "B19001_001", "Percent White" = "B03002_003", "Percent Black" = "B03002_004", "Percent Native American" = "B03002_005", "Percent Asian" = "B03002_006","Percent Hawaiian/P.I." = "B03002_007", "Hispanic" = "B03002_012")
+
 states = list("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin","Wyoming")
+
+racevars <- c(White = "P005003", 
+              Black = "P005004", 
+              Asian = "P005006", 
+              Hispanic = "P004003")
 
 ui <- dashboardPage(
     dashboardHeader(),
     dashboardSidebar(
-      menuItem(selectizeInput("states", "Select State(s)", choices = states, selected="California", multiple=TRUE))
+      menuItem(selectizeInput("states", "Select State(s)", choices = states, selected="California", multiple=TRUE),
+               menuItem(downloadButton("download1", "Download Data"), br()))
     ),
     dashboardBody(fluidRow(
-      column(width = 9,
+      column(width = 7,
              box(width = NULL, solidHeader = TRUE,
-                 leafletOutput("map", height = 500))
-             ))
-))
+                 leafletOutput("map", height = 600))),
+      column(width= 5,
+             box(width=NULL, solidHeader = TRUE,
+                 plotlyOutput("pie", height=275)),
+             box(width = NULL, solidHeader = TRUE,
+                 plotlyOutput("barchart", height=275)))
+    
+)))
 
 server <- function(input, output) {
   
@@ -67,14 +84,18 @@ server <- function(input, output) {
   })
   
   stations <- reactive({
-  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",NREL_states(),"&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
+  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",NREL_states(),"&access=all&fuel_type=all&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
   stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
   stations <- stations$fuel_stations
 })
+  
+  tab1 <- reactive({
+    dtable <- datatable(stations())
+  })
 
   output$map <- renderLeaflet({
       leaflet() %>%
-      setView(-120.8, 37, 5.5) %>%
+      setView(-115.8, 37, 5) %>%
       addProviderTiles(providers$CartoDB.Positron, group = "Positron") %>%
       addPolygons(data = tracts(), popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
@@ -96,10 +117,39 @@ server <- function(input, output) {
         baseGroups = c("Positron"),
         overlayGroups = c("Charging Stations", "Station Heatmap", "Median Monthly Income"),
         options = layersControlOptions(collapsed = FALSE)) %>%
-      hideGroup("Station Heatmap")
-    
-  }) 
+      hideGroup("Station Heatmap")}) 
 
+  output$download1 <- downloadHandler(
+    filename = function() {
+      paste("CharingStations.csv", sep="")
+    },
+    content = function(file) {
+      write.csv(tab1(), file)
+    })  
+  
+  bar <- reactive({
+    stations() %>%
+    count(facility_type)%>%
+    filter(n>10 & n<3000)})
+  
+  output$barchart <- renderPlotly({
+    ggplotly(
+    ggplot(data = bar(), aes(x=reorder(facility_type, n), y=n, fill=facility_type)) +
+      geom_bar(stat='identity') + theme(axis.text.x=element_text(angle=90), axis.title.x = element_blank(), legend.position='none') +
+      labs(y="Total Number", title = "Frequency of Charging Station Facility Types"))})
+  
+  pie <- reactive({
+    stations() %>%
+    count(access_code)})
+  
+  output$pie <- renderPlotly({
+    fig <- plot_ly(pie(), labels = ~access_code, values = ~n, type = 'pie')
+    fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
+                          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+    fig
+  })
 }
+
 
 shinyApp(ui, server)

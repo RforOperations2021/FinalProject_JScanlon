@@ -489,9 +489,20 @@ a <- c("California", "Connecticut", "Colorado")
   NREL_states <- noquote(paste(st.abbs, collapse = ','))
   
   
-  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",NREL_states,"&access=public&fuel_type=ELEC&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
+  res <- GET(paste0("https://developer.nrel.gov/api/alt-fuel-stations/v1.json?&state=",NREL_states,"&access=all&fuel_type=all&api_key=0odqc8Jlse5m02yD2aUykpQ53pHlowIseRUvkKa8"))
   stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
   stations <- stations$fuel_stations
+  stations
+  
+  pie <- stations %>%
+    count(access_code)
+  
+    fig <- plot_ly(pie, labels = ~access_code, values = ~n, type = 'pie')
+fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+    
 
 
       leaflet() %>%
@@ -520,5 +531,49 @@ a <- c("California", "Connecticut", "Colorado")
       hideGroup("Station Heatmap")
 
 ```
+```{r}
+library(plotly)
+library(ggplot2)
+library(dplyr)
 
+racevars <- c(White = "P005003", 
+              Black = "P005004", 
+              Asian = "P005006", 
+              Hispanic = "P004003")
+
+County <- get_decennial(geography = "tract", variables = racevars, 
+                  state = "CA", county = "Los Angeles County", geometry = TRUE,
+                  summary_var = "P001001") 
+
+County <- County %>%
+  mutate(pct = 100 * (value / summary_value))
+
+ggplot(data=County, aes(fill = pct)) +
+  facet_wrap(~variable) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c()
+
+
+
+County
+
+leaflet(County) %>%
+  addTiles() %>%
+  
+
+c <- counties(state="CA")
+c <- as.data.frame(c)
+c$NAMELSAD
+```
+
+```{r}
+library(plotly)
+pie <- stations %>%
+  count(facility_type)%>%
+  filter(n>10 & n<3000)
+
+ggplotly(
+ggplot(data = pie, aes(x=reorder(facility_type, n), y=n, fill=facility_type)) + geom_bar(stat='identity') + theme(axis.text.x=element_text(angle=90), legend.position='none') +
+labs(x="Charging Station Facility Type", y="Total Number"))
+```
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
