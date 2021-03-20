@@ -23,6 +23,8 @@ library(ggplot2)
 library(plotly)
 library(dplyr)
 library(ggforce)
+library(DT)
+library(colourpicker)
 
 census_api_key("ae0adfeb544b3e9ff4472500a625e6e9c8d97cd1")
 
@@ -30,18 +32,34 @@ race_vars <- c("Median Monthly Income" = "B19001_001", "Percent White" = "B03002
 
 states = list("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin","Wyoming")
 
+vars <- list("access_code", "fuel_type_code", "owner_type_code")
+
 racevars <- c(White = "P005003", 
               Black = "P005004", 
               Asian = "P005006", 
               Hispanic = "P004003")
 
 ui <- dashboardPage(
-    dashboardHeader(),
+    dashboardHeader(title = "EV Infrastructure"),
     dashboardSidebar(
-      menuItem(selectizeInput("states", "Select State(s)", choices = states, selected="California", multiple=TRUE),
-               menuItem(downloadButton("download1", "Download Data"), br()))
-    ),
-    dashboardBody(fluidRow(
+      sidebarMenu(
+        id = "tabs",
+      menuItem("Charging Stations", tabName="Stations"),
+      menuItem("View Data", tabName = "Data"),
+      menuItem(selectizeInput("states", "Select State(s)", choices = states, selected="California", multiple=TRUE)),
+      menuItem(actionButton(inputId = "update_map", label = "Update Map Data")),
+      menuItem(colourInput("color", 'Select Color for Charging Stations:', value = "#FFFF00")),
+      menuItem(selectInput("var_select", "Select Pie Chart Variable", choices = vars, selected="fuel_type_code")),
+      menuItem(sliderInput("range", "Filter Charging Stations Facility types by Count:",
+                  min = 0, max = 15000,
+                  value = c(100, 1000),
+                  step = 100))
+    )),
+    dashboardBody(
+      tabItems(
+        tabItem(tabName = "Stations",
+      h3("Electric Vehicle Charging Station Network by State"),
+        fluidRow(
       column(width = 7,
              box(width = NULL, solidHeader = TRUE,
                  leafletOutput("map", height = 600))),
@@ -49,9 +67,15 @@ ui <- dashboardPage(
              box(width=NULL, solidHeader = TRUE,
                  plotlyOutput("pie", height=275)),
              box(width = NULL, solidHeader = TRUE,
-                 plotlyOutput("barchart", height=275)))
+                 plotlyOutput("barchart", height=275))))),
+      tabItem(tabName = "Data",
+        h3("Raw Data Table"),
+        downloadButton("download1", "Download Data"),
+        fluidRow(DT::dataTableOutput("tab1")
+        ))
+      ))
     
-)))
+)
 
 server <- function(input, output) {
   
@@ -89,27 +113,53 @@ server <- function(input, output) {
   stations <- stations$fuel_stations
 })
   
+  map_update1 <- eventReactive(eventExpr = input$update_map,
+                          valueExpr = {
+                            req(input$states)
+                            tracts()
+                          },
+                          ignoreNULL = FALSE)
+  
+  map_update2 <- eventReactive(eventExpr = input$update_map,
+                               valueExpr = {
+                                 req(input$states)
+                                 stations()
+                               },
+                               ignoreNULL = FALSE)
+  
   tab1 <- reactive({
     dtable <- datatable(stations())
+  })
+  
+  output$tab1 <- DT::renderDataTable({
+    tab1()
+  })
+  
+  mean_long <- reactive({
+    mean(stations()[["longitude"]]) 
+  })
+  
+  mean_lat <- reactive({
+    mean(stations()[["latitude"]]) 
   })
 
   output$map <- renderLeaflet({
       leaflet() %>%
-      setView(-115.8, 37, 5) %>%
+      setView(mean_long()+3, mean_lat(), 5) %>%
       addProviderTiles(providers$CartoDB.Positron, group = "Positron") %>%
-      addPolygons(data = tracts(), popup = ~ str_extract(NAME, "^([^,]*)"),
+      addPolygons(data = map_update1(), popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
                   smoothFactor = 0,
                   fillOpacity = 0.8,
                   color = ~ pal(estimate),
                   group = "Median Monthly Income") %>%
-      addCircles(data = stations(), lng = ~longitude, lat = ~latitude, weight = 1, color="yellow",
+      addCircles(data = map_update2(), lng = ~longitude, lat = ~latitude, weight = 1, color=input$color,
                  group = "Charging Stations") %>%
-      addHeatmap(data = stations(), lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10,
+      addHeatmap(data = map_update2(), lng= ~longitude, lat= ~latitude, max=100, radius=20, blur=10,
                  group = "Station Heatmap") %>%
       addLegend("bottomright", 
                 pal = pal, 
-                values = tracts()$estimate,
+                values = map_update1()$estimate,
                 title = "Median Monthly Income",
                 labFormat = labelFormat(prefix = "$"),
                 opacity = 1) %>%
@@ -119,18 +169,22 @@ server <- function(input, output) {
         options = layersControlOptions(collapsed = FALSE)) %>%
       hideGroup("Station Heatmap")}) 
 
+  tab2 <- reactive({
+    tab2 <- as.data.frame(stations())
+  })
+  
   output$download1 <- downloadHandler(
     filename = function() {
-      paste("CharingStations.csv", sep="")
+      paste("ChargingStations.csv", sep="")
     },
     content = function(file) {
-      write.csv(tab1(), file)
-    })  
+      write.csv(stations(), file)
+    })
   
   bar <- reactive({
     stations() %>%
     count(facility_type)%>%
-    filter(n>10 & n<3000)})
+    filter(n>= min(input$range) & n<= max(input$range))})
   
   output$barchart <- renderPlotly({
     ggplotly(
@@ -140,15 +194,19 @@ server <- function(input, output) {
   
   pie <- reactive({
     stations() %>%
-    count(access_code)})
+    count(stations()[,input$var_select])})
+  
+  pie2 <- reactive({
+    as.vector(pie()[,1])})
   
   output$pie <- renderPlotly({
-    fig <- plot_ly(pie(), labels = ~access_code, values = ~n, type = 'pie')
+    fig <- plot_ly(pie(), labels = ~pie2(), values = ~n, type = 'pie', textinfo = 'none')
     fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
                           xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
                           yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
     fig
   })
+  
 }
 
 

@@ -382,7 +382,6 @@ stations <- jsonlite::fromJSON(content(res, "text"), flatten=TRUE)
 stations <- stations$fuel_stations
 
       leaflet() %>%
-      setView(-90.8, 37, 2) %>%
       addProviderTiles(providers$CartoDB.Positron, group = "Positron") %>%
       addPolygons(data = CA_tracts, popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
@@ -494,6 +493,8 @@ a <- c("California", "Connecticut", "Colorado")
   stations <- stations$fuel_stations
   stations
   
+vars <- list("access_code", "fuel_type_code", "owner_type_code")
+  
   pie <- stations %>%
     count(access_code)
   
@@ -502,11 +503,11 @@ fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
 
+
     
 
 
       leaflet() %>%
-      setView(-120.8, 37, 5.5) %>%
       addProviderTiles(providers$CartoDB.Positron, group = "Positron") %>%
       addPolygons(data = st_tracts, popup = ~ str_extract(NAME, "^([^,]*)"),
                   stroke = FALSE,
@@ -531,6 +532,9 @@ fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
       hideGroup("Station Heatmap")
 
 ```
+
+
+
 ```{r}
 library(plotly)
 library(ggplot2)
@@ -553,6 +557,18 @@ ggplot(data=County, aes(fill = pct)) +
   geom_sf(color = NA) +
   scale_fill_viridis_c()
 
+stations[,ab]
+ab <- paste0(vars[2])
+pie <- stations %>%
+    count(stations[,ab])
+
+c <- as.vector(pie[,1])
+
+    fig <- plot_ly(pie, labels = ~c, values = ~n, type = 'pie', textinfo = 'none')
+    fig <- fig %>% layout(title = 'Frequncy of Charging Station Types',
+                          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+    fig
 
 
 County
@@ -575,5 +591,8 @@ pie <- stations %>%
 ggplotly(
 ggplot(data = pie, aes(x=reorder(facility_type, n), y=n, fill=facility_type)) + geom_bar(stat='identity') + theme(axis.text.x=element_text(angle=90), legend.position='none') +
 labs(x="Charging Station Facility Type", y="Total Number"))
+
+ mean(stations[["longitude"]]) 
+
 ```
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
